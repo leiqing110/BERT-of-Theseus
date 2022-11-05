@@ -6,7 +6,7 @@ import logging
 import os
 import random
 import json
-
+import pdb
 import numpy as np
 import torch
 from torch.utils.data import (DataLoader, RandomSampler, SequentialSampler,
@@ -166,7 +166,7 @@ def train(args, train_dataset, model, tokenizer):
                         results = evaluate(args, model, tokenizer)
                         for key, value in results.items():
                             eval_key = 'eval_{}'.format(key)
-                            logs[eval_key] = float(value)
+                            logs[eval_key] = float(value['f1'])
 
                     loss_scalar = (tr_loss - logging_loss) / args.logging_steps
                     learning_rate_scalar = scheduler.get_lr()[0]
@@ -436,6 +436,7 @@ def main():
         device = torch.device("cuda", args.local_rank)
         torch.distributed.init_process_group(backend='nccl')
         args.n_gpu = 1
+        
     args.device = device
 
     # Setup logging
@@ -484,7 +485,7 @@ def main():
         torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
     model.to(args.device)
-
+    
     logger.info("Training/evaluation parameters %s", args)
 
     # Training
