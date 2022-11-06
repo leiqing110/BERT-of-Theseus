@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class BertEncoder(nn.Module):
-    def __init__(self, config, scc_n_layer=6):
+    def __init__(self, config, scc_n_layer=3):
         super(BertEncoder, self).__init__()
         self.prd_n_layer = config.num_hidden_layers
         self.scc_n_layer = scc_n_layer

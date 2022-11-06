@@ -56,7 +56,7 @@ def train(args, train_dataset, model, tokenizer):
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
     train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
-
+    
     if args.max_steps > 0:
         t_total = args.max_steps
         args.num_train_epochs = args.max_steps // (len(train_dataloader) // args.gradient_accumulation_steps) + 1
@@ -121,6 +121,7 @@ def train(args, train_dataset, model, tokenizer):
     model.zero_grad()
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
     set_seed(args)  # Added here for reproductibility (even between python 2 and 3)
+    max_f1 = -1
     for _ in train_iterator:
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])
         for step, batch in enumerate(epoch_iterator):
@@ -148,6 +149,7 @@ def train(args, train_dataset, model, tokenizer):
                 loss.backward()
 
             tr_loss += loss.item()
+            
             if (step + 1) % args.gradient_accumulation_steps == 0:
                 if args.fp16:
                     torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.max_grad_norm)
@@ -159,11 +161,23 @@ def train(args, train_dataset, model, tokenizer):
                 replacing_rate_scheduler.step()  # Update replace rate scheduler
                 model.zero_grad()
                 global_step += 1
-
                 if args.local_rank in [-1, 0] and args.logging_steps > 0 and global_step % args.logging_steps == 0:
                     logs = {}
+                    
                     if args.local_rank == -1 and args.evaluate_during_training:  # Only evaluate when single GPU otherwise metrics may not average well
                         results = evaluate(args, model, tokenizer)
+                        
+                        if results['acc']['f1'] > max_f1:
+                            max_f1 = results['acc']['f1']
+                            # Save model checkpoint
+                            output_dir = os.path.join(args.output_dir, 'checkpoint-max')
+                            if not os.path.exists(output_dir):
+                                os.makedirs(output_dir)
+                            model_to_save = model.module if hasattr(model,
+                                                                    'module') else model  # Take care of distributed/parallel training
+                            model_to_save.save_pretrained(output_dir)
+                            torch.save(args, os.path.join(output_dir, 'training_args.bin'))
+                            logger.info("保存结果最好的模型 %s", output_dir)
                         for key, value in results.items():
                             eval_key = 'eval_{}'.format(key)
                             logs[eval_key] = float(value['f1'])
@@ -178,16 +192,16 @@ def train(args, train_dataset, model, tokenizer):
                         tb_writer.add_scalar(key, value, global_step)
                     print(json.dumps({**logs, **{'step': global_step}}))
 
-                if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
-                    # Save model checkpoint
-                    output_dir = os.path.join(args.output_dir, 'checkpoint-{}'.format(global_step))
-                    if not os.path.exists(output_dir):
-                        os.makedirs(output_dir)
-                    model_to_save = model.module if hasattr(model,
-                                                            'module') else model  # Take care of distributed/parallel training
-                    model_to_save.save_pretrained(output_dir)
-                    torch.save(args, os.path.join(output_dir, 'training_args.bin'))
-                    logger.info("Saving model checkpoint to %s", output_dir)
+                # if args.local_rank in [-1, 0] and args.save_steps > 0 and global_step % args.save_steps == 0:
+                #     # Save model checkpoint
+                #     output_dir = os.path.join(args.output_dir, 'checkpoint-{}'.format(global_step))
+                #     if not os.path.exists(output_dir):
+                #         os.makedirs(output_dir)
+                #     model_to_save = model.module if hasattr(model,
+                #                                             'module') else model  # Take care of distributed/parallel training
+                #     model_to_save.save_pretrained(output_dir)
+                #     torch.save(args, os.path.join(output_dir, 'training_args.bin'))
+                #     logger.info("Saving model checkpoint to %s", output_dir)
 
             if args.max_steps > 0 and global_step > args.max_steps:
                 epoch_iterator.close()
