@@ -5,8 +5,8 @@ export TASK_NAME=custom
 export GLUE_DIR=/zhangleisx4614/code/pytorch_bert_chinese_classification-main/data/
 export TASK_NAME=custom
 
-CUDA_VISIBLE_DEVICES=0 python ./run_glue.py \
---model_name_or_path /zhangleisx4614/code/pytorch_bert_chinese_classification-main/torch2tf/local-pt-checkpoint-1103-thesues/ \
+CUDA_VISIBLE_DEVICES=1 python ./run_glue.py \
+--model_name_or_path  /zhangleisx4614/code/pytorch_bert_chinese_classification-main/checkpoints/online_model/best_result_test4000_train_11.2w_5w_easy_new_5.3_29_class_re_1220.pt_bin/ \
 --task_name $TASK_NAME \
 --do_train \
 --do_eval \
